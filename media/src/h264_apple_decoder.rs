@@ -284,7 +284,7 @@ impl VideoFrameDecoder for AppleH264Decoder {
                 std::ptr::null(),
                 avcc_buf.as_ptr() as *mut c_void,
                 avcc_buf.len(),
-                std::ptr::null(), // kCFAllocatorNull — we manage the memory
+                kCFAllocatorNull as *const c_void,
                 std::ptr::null(), // no custom block source
                 0,
                 avcc_buf.len(),
