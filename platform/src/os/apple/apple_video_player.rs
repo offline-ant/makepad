@@ -7,7 +7,7 @@ use {
         makepad_live_id::LiveId,
         PlaybackPrepared,
         texture::{CxTexturePool, TextureId},
-        video_decode::software_video::SoftwareVideoPlayer,
+        video_decode::software_video::PlaybackSessionHandle,
         video_decode::yuv::{YuvColorMatrix, YuvPlaneData},
     },
 };
@@ -29,7 +29,7 @@ pub struct AppleUnifiedVideoPlayer {
 
 enum ApplePlayerMode {
     Native(AppleVideoPlayer),
-    Software(SoftwareVideoPlayer),
+    Software(PlaybackSessionHandle),
 }
 
 impl AppleUnifiedVideoPlayer {
@@ -56,7 +56,7 @@ impl AppleUnifiedVideoPlayer {
             } else if source.is_session() {
                 crate::log!("VIDEO: session source uses software video decoder");
             }
-            ApplePlayerMode::Software(SoftwareVideoPlayer::new(
+            ApplePlayerMode::Software(PlaybackSessionHandle::new(
                 video_id,
                 texture_id,
                 source.clone(),
@@ -95,7 +95,7 @@ impl AppleUnifiedVideoPlayer {
             "VIDEO: Apple native playback failed, falling back to software video decoder: {}",
             reason
         );
-        self.mode = ApplePlayerMode::Software(SoftwareVideoPlayer::new(
+        self.mode = ApplePlayerMode::Software(PlaybackSessionHandle::new(
             self.video_id,
             self.texture_id,
             self.source.clone(),

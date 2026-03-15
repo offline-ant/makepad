@@ -33,7 +33,6 @@ use {
         },
         permission::Permission,
         shared_framebuf::PollTimers,
-        PlaybackPrepared,
         texture::{Texture, TextureFormat},
         thread::SignalToUI,
         window::{CxWindowPool, MacosWindowConfig, WindowId},
