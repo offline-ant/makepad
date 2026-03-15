@@ -34,6 +34,7 @@ workspace.members = [
     "media/examples/camera_av1_capture",
     "media/examples/window_record_mp4",
     "media/examples/camera_baseline",
+    "media/examples/camera_av_record",
     "libs/gltf",
     "libs/splat",
     # "libs/makepad_physics",

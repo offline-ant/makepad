@@ -497,7 +497,12 @@ fn worker_loop(
                 continue;
             }
 
-            let data_len = y.len() + u.len() + v.len();
+            // Android MediaCodec with COLOR_FormatYUV420Flexible expects NV12
+            // (Y plane + interleaved UV), not I420 (Y + U + V separate planes).
+            let cw = (frame.width as u32 + 1) / 2;
+            let ch = (frame.height as u32 + 1) / 2;
+            let uv_len = (cw * ch * 2) as usize;
+            let data_len = y.len() + uv_len;
             let data = unsafe { (**env).NewByteArray.unwrap()(env, data_len as i32) };
             if data.is_null() {
                 continue;
@@ -505,8 +510,12 @@ fn worker_loop(
 
             let mut packed = Vec::with_capacity(data_len);
             packed.extend_from_slice(y);
-            packed.extend_from_slice(u);
-            packed.extend_from_slice(v);
+            // Interleave U and V into NV12 UV plane
+            let uv_samples = (cw * ch) as usize;
+            for i in 0..uv_samples {
+                packed.push(u.get(i).copied().unwrap_or(128));
+                packed.push(v.get(i).copied().unwrap_or(128));
+            }
 
             unsafe {
                 (**env).SetByteArrayRegion.unwrap()(
