@@ -3,7 +3,6 @@ use {
         event::video_playback::VideoSource,
         makepad_error_log::*,
         makepad_live_id::LiveId,
-        PlaybackPrepared,
         os::apple::apple_sys::*,
         texture::{CxTexturePool, TextureAlloc, TextureCategory, TextureId, TexturePixel},
     },

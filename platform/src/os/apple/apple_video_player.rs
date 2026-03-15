@@ -5,7 +5,6 @@ use {
     crate::{
         event::video_playback::VideoSource,
         makepad_live_id::LiveId,
-        PlaybackPrepared,
         texture::{CxTexturePool, TextureId},
         video_decode::software_video::PlaybackSessionHandle,
         video_decode::yuv::{YuvColorMatrix, YuvPlaneData},

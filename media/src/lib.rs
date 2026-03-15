@@ -387,8 +387,6 @@ impl MediaPlugin for DefaultMediaPlugin {
                 {
                     let dec = h264_apple_decoder::AppleH264Decoder::new(
                         &sps_pps,
-                        config.width,
-                        config.height,
                     )?;
                     return Ok(Box::new(dec));
                 }

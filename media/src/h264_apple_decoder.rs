@@ -20,14 +20,12 @@ pub struct AppleH264Decoder {
     session: VTDecompressionSessionRef,
     format_desc: CMFormatDescriptionRef,
     queue: Arc<Mutex<DecoderQueue>>,
-    width: u32,
-    height: u32,
 }
 
 unsafe impl Send for AppleH264Decoder {}
 
 impl AppleH264Decoder {
-    pub fn new(sps_pps_annexb: &[u8], width: u32, height: u32) -> Result<Self, String> {
+    pub fn new(sps_pps_annexb: &[u8]) -> Result<Self, String> {
         let (sps_list, pps_list) = h264_packets::annexb_to_sps_pps(sps_pps_annexb);
         if sps_list.is_empty() || pps_list.is_empty() {
             return Err("no SPS/PPS found in Annex B data".into());
@@ -91,8 +89,6 @@ impl AppleH264Decoder {
                 session,
                 format_desc,
                 queue,
-                width,
-                height,
             })
         }
     }
