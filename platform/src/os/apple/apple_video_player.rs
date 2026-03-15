@@ -5,9 +5,9 @@ use {
     crate::{
         event::video_playback::VideoSource,
         makepad_live_id::LiveId,
-        media_plugin::PlaybackPrepared,
+        PlaybackPrepared,
         texture::{CxTexturePool, TextureId},
-        video_decode::software_video::PlaybackSessionHandle,
+        video_decode::software_video::SoftwareVideoPlayer,
         video_decode::yuv::{YuvColorMatrix, YuvPlaneData},
     },
 };
@@ -29,7 +29,7 @@ pub struct AppleUnifiedVideoPlayer {
 
 enum ApplePlayerMode {
     Native(AppleVideoPlayer),
-    Software(PlaybackSessionHandle),
+    Software(SoftwareVideoPlayer),
 }
 
 impl AppleUnifiedVideoPlayer {
@@ -56,7 +56,7 @@ impl AppleUnifiedVideoPlayer {
             } else if source.is_session() {
                 crate::log!("VIDEO: session source uses software video decoder");
             }
-            ApplePlayerMode::Software(PlaybackSessionHandle::new(
+            ApplePlayerMode::Software(SoftwareVideoPlayer::new(
                 video_id,
                 texture_id,
                 source.clone(),
@@ -95,7 +95,7 @@ impl AppleUnifiedVideoPlayer {
             "VIDEO: Apple native playback failed, falling back to software video decoder: {}",
             reason
         );
-        self.mode = ApplePlayerMode::Software(PlaybackSessionHandle::new(
+        self.mode = ApplePlayerMode::Software(SoftwareVideoPlayer::new(
             self.video_id,
             self.texture_id,
             self.source.clone(),
@@ -104,7 +104,9 @@ impl AppleUnifiedVideoPlayer {
         ));
     }
 
-    pub fn check_prepared(&mut self) -> Option<Result<PlaybackPrepared, String>> {
+    pub fn check_prepared(
+        &mut self,
+    ) -> Option<Result<crate::media_plugin::PlaybackPrepared, String>> {
         match &mut self.mode {
             ApplePlayerMode::Native(player) => match player.check_prepared() {
                 Some(Err(err)) => {

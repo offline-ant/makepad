@@ -187,8 +187,8 @@ pub use {
         media_host::{MediaControlBridge, MediaEventBridge, MediaTextureBridge, MediaTextureInfo},
         media_plugin::{
             media_plugin, media_video_capabilities, merge_video_capabilities,
-            register_media_plugin, FrameDecoderCodec, FrameDecoderConfig, MediaPlaybackSession,
-            MediaPlugin, MediaVideoEncoder, MseAudioTrackInfo, MseDecodedAudioFrame,
+            register_media_plugin, FrameDecoderCodec, FrameDecoderConfig, MediaPlugin,
+            MediaPlaybackSession, MediaVideoEncoder, MseAudioTrackInfo, MseDecodedAudioFrame,
             MseDecodedFrame, MseEngineOutput, MseInitMetadata, MsePlaybackEngine,
             MseVideoTrackInfo, PlaybackPrepared, VideoFrameDecoder,
         },
