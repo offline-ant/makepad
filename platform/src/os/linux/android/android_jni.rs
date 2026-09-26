@@ -1556,6 +1556,14 @@ pub unsafe fn to_java_copy_to_clipboard(content: String) {
     );
 }
 
+pub unsafe fn to_java_open_url(url: &str) {
+    let Ok(url) = CString::new(url) else { return };
+    let env = attach_jni_env();
+    let url = ((**env).NewStringUTF.unwrap())(env, url.as_ptr());
+    ndk_utils::call_void_method!(env, get_activity(), "openUrl", "(Ljava/lang/String;)V", url);
+    ((**env).DeleteLocalRef.unwrap())(env, url);
+}
+
 pub unsafe fn to_java_paste_from_clipboard() -> String {
     let env = attach_jni_env();
     let result = ndk_utils::call_object_method!(

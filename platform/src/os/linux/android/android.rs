@@ -3136,8 +3136,8 @@ impl CxOsApi for Cx {
             .as_secs_f64()
     }
 
-    fn open_url(&mut self, _url: &str, _in_place: OpenUrlInPlace) {
-        crate::error!("open_url not implemented on this platform");
+    fn open_url(&mut self, url: &str, _in_place: OpenUrlInPlace) {
+        unsafe { android_jni::to_java_open_url(url) };
     }
 
     fn in_xr_mode(&self) -> bool {

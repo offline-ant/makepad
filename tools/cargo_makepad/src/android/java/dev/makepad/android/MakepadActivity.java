@@ -2207,6 +2207,19 @@ public class MakepadActivity
         });
     }
 
+    public void openUrl(final String url) {
+        runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    } catch (Exception e) {
+                        Log.e("Makepad", "openUrl failed: " + url, e);
+                    }
+                }
+            });
+    }
+
     public void copyToClipboard(String content) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         // User-facing description of the clipboard content
