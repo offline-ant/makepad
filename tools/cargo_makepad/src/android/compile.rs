@@ -275,6 +275,8 @@ struct BuildPaths {
     manifest_file: PathBuf,
     java_file: PathBuf,
     xr_file: PathBuf,
+    /// App-supplied `resources/android/java/**/*.java`, other than its `MakepadApp.java`.
+    app_java_sources: Vec<PathBuf>,
     dst_unaligned_apk: PathBuf,
     dst_apk: PathBuf,
 }
@@ -1112,8 +1114,27 @@ fn prepare_build(opts: &PrepareBuildOpts<'_>) -> Result<BuildPaths, String> {
     let manifest_file = tmp_dir.join("AndroidManifest.xml");
     write_text(&manifest_file, &manifest_xml)?;
 
-    let main_java = main_java(opts.java_url);
+    // App-supplied Java sources (for example an Android Service) compile with Makepad's
+    // classes. `<package path>/MakepadApp.java` there replaces the generated activity.
     let java_path = opts.java_url.replace('.', "/");
+    let app_java_dir = build_crate_dir.join("resources/android/java");
+    let app_main_java = Path::new(&java_path).join("MakepadApp.java");
+    let mut main_java = main_java(opts.java_url);
+    let mut app_java_sources = Vec::new();
+    if app_java_dir.is_dir() {
+        for rel in ls(&app_java_dir)? {
+            if rel.extension().and_then(|ext| ext.to_str()) != Some("java") {
+                continue;
+            }
+            if rel == app_main_java {
+                main_java = fs::read_to_string(app_java_dir.join(&rel))
+                    .map_err(|e| format!("Cant read {:?}: {e}", app_java_dir.join(&rel)))?;
+            } else {
+                app_java_sources.push(app_java_dir.join(rel));
+            }
+        }
+        app_java_sources.sort();
+    }
     let java_file = tmp_dir.join(&java_path).join("MakepadApp.java");
     write_text(&java_file, &main_java)?;
 
@@ -1136,6 +1157,7 @@ fn prepare_build(opts: &PrepareBuildOpts<'_>) -> Result<BuildPaths, String> {
         manifest_file,
         java_file,
         xr_file,
+        app_java_sources,
         dst_unaligned_apk,
         dst_apk,
     })
@@ -1192,7 +1214,7 @@ fn compile_java(
     let makepad_java_classes_dir = &cargo_manifest_dir
         .join("src/android/java/")
         .join(makepad_package_path);
-    let java_sources = vec![
+    let mut java_sources = vec![
         r_class_path.clone(),
         makepad_java_classes_dir.join("MakepadNative.java"),
         makepad_java_classes_dir.join("MakepadActivity.java"),
@@ -1210,6 +1232,7 @@ fn compile_java(
         build_paths.java_file.clone(),
         build_paths.xr_file.clone(),
     ];
+    java_sources.extend(build_paths.app_java_sources.iter().cloned());
 
     let mut hasher = DefaultHasher::new();
     for source in &java_sources {
@@ -1775,6 +1798,39 @@ fn add_rust_library(
     }
 
     Ok(build_dir.unwrap())
+}
+
+/// Packs prebuilt `<crate>/resources/android/jniLibs/<abi>/lib*.so` files into the APK's
+/// `lib/<abi>/`, like Gradle's `jniLibs`. With `android:extractNativeLibs="true"` the
+/// installer extracts them executable into the app's native library directory, which
+/// is how an app ships a native helper program that it can `execve`.
+fn add_app_native_libs(
+    sdk_dir: &Path,
+    build_crate: &str,
+    build_paths: &BuildPaths,
+    android_targets: &[AndroidTarget],
+    urls: &AndroidSDKUrls,
+) -> Result<(), String> {
+    let jni_libs = get_crate_dir(build_crate)?.join("resources/android/jniLibs");
+    for android_target in android_targets {
+        let abi = android_target.abi_identifier();
+        let src_dir = jni_libs.join(abi);
+        if !src_dir.is_dir() {
+            continue;
+        }
+        for rel in ls(&src_dir)? {
+            let binary_path = format!("lib/{abi}/{}", rel.display());
+            cp(&src_dir.join(&rel), &build_paths.out_dir.join(&binary_path), false)?;
+            shell_env_cap(
+                &[],
+                &build_paths.out_dir,
+                aapt_path(sdk_dir, urls).to_str().unwrap(),
+                &["add", build_paths.dst_unaligned_apk.to_str().unwrap(), &binary_path],
+            )?;
+            println!("  Bundled app native lib: {binary_path}");
+        }
+    }
+    Ok(())
 }
 
 fn add_resources(
@@ -2836,6 +2892,7 @@ pub fn build(
         variant,
         urls,
     )?;
+    add_app_native_libs(sdk_dir, build_crate, &build_paths, android_targets, urls)?;
     add_resources(
         sdk_dir,
         build_crate,
