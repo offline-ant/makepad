@@ -113,8 +113,12 @@ impl Font {
         self.face.with_ttf_parser_face(f)
     }
 
-    pub(super) fn with_rustybuzz_face<R>(&self, f: impl FnOnce(&rustybuzz::Face<'_>) -> R) -> R {
-        self.face.with_rustybuzz_face(f)
+    pub(super) fn shape(
+        &self,
+        features: &[rustybuzz::Feature],
+        buffer: rustybuzz::UnicodeBuffer,
+    ) -> rustybuzz::GlyphBuffer {
+        self.face.shape(features, buffer)
     }
 
     pub fn units_per_em(&self) -> f32 {
@@ -164,6 +168,13 @@ impl Font {
             let max = Point::new(bounds.x_max as f32, bounds.y_max as f32);
             Some(Rc::new(builder.finish(Rect::new(min, max - min), units_per_em)))
         });
+
+        // Fonts whose outlines live in Apple's proprietary `hvgl` table
+        // (PingFang on macOS 26+) parse fine but yield no outlines through
+        // ttf_parser; ask CoreText — which decodes hvgl in-OS — instead.
+        #[cfg(target_os = "macos")]
+        let outline = outline
+            .or_else(|| self.face.coretext_glyph_outline(glyph_id, units_per_em).map(Rc::new));
 
         {
             let mut cache = self.cached_glyph_outlines.borrow_mut();

@@ -161,6 +161,30 @@ mod typed_vertex_tests {
                 .contains("cannot contain nested structs, arrays, matrices")
         );
     }
+
+    // `if a { f() } else { g() }` as a statement leaves its phi as a value
+    // nothing uses. WGSL rejects `_phi_1;` (naga: "expected assignment or
+    // increment/decrement"); the other backends accept a bare expression.
+    #[test]
+    fn discarded_values_are_phony_assigned_in_wgsl() {
+        let mut wgsl = String::new();
+        ShaderBackend::Wgsl.write_discarded_expr(&mut wgsl, "_phi_353", false);
+        ShaderBackend::Wgsl.write_discarded_expr(&mut wgsl, "mix(a, b, t)", false);
+        ShaderBackend::Wgsl.write_discarded_expr(&mut wgsl, "Sdf2d_box(&l_sdf, 1.0)", true);
+        ShaderBackend::Wgsl.write_discarded_expr(&mut wgsl, "", false);
+        assert_eq!(wgsl, "_ = _phi_353;\n_ = mix(a, b, t);\nSdf2d_box(&l_sdf, 1.0);\n");
+
+        for backend in [
+            ShaderBackend::Metal,
+            ShaderBackend::Glsl,
+            ShaderBackend::Hlsl,
+            ShaderBackend::Rust,
+        ] {
+            let mut out = String::new();
+            backend.write_discarded_expr(&mut out, "_phi_353", false);
+            assert_eq!(out, "_phi_353;\n", "{backend:?}");
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -803,29 +827,33 @@ impl ShaderBackend {
     }
 
     pub fn map_local_name(&self, id: LiveId, shadow: usize) -> String {
+        let mut out = String::new();
+        self.write_local_name(&mut out, id, shadow);
+        out
+    }
+
+    pub fn write_local_name(&self, out: &mut String, id: LiveId, shadow: usize) {
         match self {
             Self::Hlsl => {
                 if shadow > 0 {
-                    format!("l_{}_{}", id, shadow)
+                    write!(out, "l_{}_{}", id, shadow).ok();
                 } else {
-                    format!("l_{}", id)
+                    write!(out, "l_{}", id).ok();
                 }
             }
             Self::Glsl => {
-                let base = if id == id!(self) {
-                    "_self".to_string()
+                if id == id!(self) {
+                    out.push_str("l__self");
                 } else {
-                    format!("{}", id)
-                };
+                    write!(out, "l_{}", id).ok();
+                }
                 if shadow > 0 {
-                    format!("l_{}_{}", base, shadow)
-                } else {
-                    format!("l_{}", base)
+                    write!(out, "_{}", shadow).ok();
                 }
             }
             Self::Rust => {
-                let base = if id == id!(self) {
-                    "_self".to_string()
+                if id == id!(self) {
+                    out.push_str("_self");
                 } else if id == id!(type)
                     || id == id!(match)
                     || id == id!(fn)
@@ -854,50 +882,56 @@ impl ShaderBackend {
                     || id == id!(super)
                     || id == id!(crate)
                 {
-                    format!("r#{}", id)
+                    write!(out, "r#{}", id).ok();
                 } else {
-                    format!("{}", id)
-                };
+                    write!(out, "{}", id).ok();
+                }
                 if shadow > 0 {
-                    format!("{}_{}", base, shadow)
-                } else {
-                    base
+                    write!(out, "_{}", shadow).ok();
                 }
             }
             _ => {
                 if shadow > 0 {
-                    format!("_s{}{}", shadow, id)
+                    write!(out, "_s{}{}", shadow, id).ok();
                 } else if id == id!(self) {
-                    "_self".to_string()
+                    out.push_str("_self");
                 } else {
                     // Prefix like Hlsl/Glsl above: a user-declared local emitted verbatim can
                     // collide with a reserved word in the target language (e.g. `half`, `kernel`,
                     // `constant`, `thread` in MSL; WGSL reserves even more), which fails shader
                     // compilation at runtime.
-                    format!("l_{}", id)
+                    write!(out, "l_{}", id).ok();
                 }
             }
         }
     }
 
     pub fn map_param_name(&self, id: LiveId, shadow: usize) -> String {
+        let mut out = String::new();
+        self.write_param_name(&mut out, id, shadow);
+        out
+    }
+
+    pub fn write_param_name(&self, out: &mut String, id: LiveId, shadow: usize) {
         if id == id!(self) {
             // Rust and WGSL self params are pointers, so dereference for field access.
             if matches!(self, Self::Rust | Self::Wgsl) {
-                return "(*_self)".to_string();
+                out.push_str("(*_self)");
+                return;
             }
-            return "_self".to_string();
+            out.push_str("_self");
+            return;
         }
         match self {
             Self::Hlsl | Self::Glsl => {
                 if shadow > 0 {
-                    format!("p_{}_{}", id, shadow)
+                    write!(out, "p_{}_{}", id, shadow).ok();
                 } else {
-                    format!("p_{}", id)
+                    write!(out, "p_{}", id).ok();
                 }
             }
-            Self::Rust => self.map_local_name(id, shadow),
-            _ => self.map_local_name(id, shadow),
+            Self::Rust => self.write_local_name(out, id, shadow),
+            _ => self.write_local_name(out, id, shadow),
         }
     }
 
@@ -910,38 +944,58 @@ impl ShaderBackend {
     }
 
     pub fn map_io_name(&self, id: LiveId) -> String {
+        let mut out = String::new();
+        self.write_io_name(&mut out, id);
+        out
+    }
+
+    pub fn write_io_name(&self, out: &mut String, id: LiveId) {
         match self {
-            Self::Hlsl => format!("io_{}", id),
-            Self::Rust => format!("{}", id),
-            _ => format!("{}", id),
+            Self::Hlsl => write!(out, "io_{}", id).ok(),
+            Self::Rust => write!(out, "{}", id).ok(),
+            _ => write!(out, "{}", id).ok(),
+        };
+    }
+
+    pub fn write_prefixed_io_name(&self, out: &mut String, prefix: &ShaderIoPrefix, id: LiveId) {
+        match prefix {
+            ShaderIoPrefix::Prefix(prefix) => {
+                out.push_str(prefix);
+                self.write_io_name(out, id);
+            }
+            ShaderIoPrefix::Full(full) => out.push_str(full),
+            ShaderIoPrefix::FullOwned(full) => out.push_str(full),
         }
     }
 
     pub fn map_field_name(&self, id: LiveId) -> String {
-        self.map_field_name_typed(id, true)
+        let mut out = String::new();
+        self.write_field_name_typed(&mut out, id, true);
+        out
     }
 
     /// Map a field name, with `is_vec_type` indicating whether the parent type is a vec
     /// (where swizzle transformations apply).
-    pub fn map_field_name_typed(&self, id: LiveId, is_vec_type: bool) -> String {
+    pub fn write_field_name_typed(&self, out: &mut String, id: LiveId, is_vec_type: bool) {
         match self {
             Self::Hlsl => {
-                let id_str = format!("{}", id);
+                let start = out.len();
+                write!(out, "{}", id).ok();
+                let id_str = &out[start..];
                 let len = id_str.len();
                 let is_swizzle = (1..=4).contains(&len)
                     && id_str.bytes().all(|c| {
                         matches!(c, b'x' | b'y' | b'z' | b'w' | b'r' | b'g' | b'b' | b'a')
                     });
-                if is_swizzle {
-                    id_str
-                } else {
-                    format!("f_{}", id_str)
+                if !is_swizzle {
+                    out.insert_str(start, "f_");
                 }
             }
             Self::Rust => {
                 let id_str = format!("{}", id);
                 if !is_vec_type {
-                    return id_str;
+                    out.push_str(&id_str);
+                    return;
                 }
                 let len = id_str.len();
                 let is_swizzle_char =
@@ -960,21 +1014,23 @@ impl ShaderBackend {
                             other => other,
                         })
                         .collect();
-                    format!("{}()", mapped)
+                    write!(out, "{}()", mapped).ok();
                 } else if all_swizzle && len == 1 {
                     // Single-char field access: map rgba to xyzw
-                    match id_str.as_str() {
-                        "r" => "x".to_string(),
-                        "g" => "y".to_string(),
-                        "b" => "z".to_string(),
-                        "a" => "w".to_string(),
-                        other => other.to_string(),
-                    }
+                    out.push_str(match id_str.as_str() {
+                        "r" => "x",
+                        "g" => "y",
+                        "b" => "z",
+                        "a" => "w",
+                        other => other,
+                    });
                 } else {
-                    id_str
+                    out.push_str(&id_str);
                 }
             }
-            _ => format!("{}", id),
+            _ => {
+                write!(out, "{}", id).ok();
+            }
         }
     }
 
@@ -1019,6 +1075,21 @@ impl ShaderBackend {
                 write!(out, "let mut {}: {} = {};\n", var_name, ty_name, zero).ok();
             }
         }
+    }
+
+    /// Writes `expr` as a statement whose value nothing uses. WGSL accepts
+    /// only a call, an assignment or an increment/decrement as a statement,
+    /// so a bare value (`_phi_12;`, `(a + b);`, `mix(a, b, t);` — `mix` is
+    /// `@must_use`) goes through the phony assignment `_ = expr;`. A void call
+    /// cannot be phony-assigned, so `is_void` keeps it bare everywhere.
+    pub fn write_discarded_expr(&self, out: &mut String, expr: &str, is_void: bool) {
+        if expr.is_empty() {
+            return;
+        }
+        match self {
+            Self::Wgsl if !is_void => write!(out, "_ = {};\n", expr).ok(),
+            _ => write!(out, "{};\n", expr).ok(),
+        };
     }
 
     /// Returns the zero literal for a given backend type name.

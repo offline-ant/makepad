@@ -107,6 +107,7 @@ impl<'a> CxSystemBrowser<'a> {
     }
 
     pub fn spawn(&mut self, url: &str) {
+        if self.cx.script_data.std.host_io_only() { return; }
         self.cx.platform_ops.push_back(CxOsOp::SpawnSystemBrowser {
             browser_id: self.id.0,
             url: url.to_string(),
@@ -128,6 +129,7 @@ impl<'a> CxSystemBrowser<'a> {
     }
 
     pub fn set_url(&mut self, url: &str, replace: bool) {
+        if self.cx.script_data.std.host_io_only() { return; }
         self.cx.platform_ops.push_back(CxOsOp::SetSystemBrowserUrl {
             browser_id: self.id.0,
             url: url.to_string(),
@@ -136,6 +138,7 @@ impl<'a> CxSystemBrowser<'a> {
     }
 
     pub fn history_go(&mut self, delta: i32) {
+        if self.cx.script_data.std.host_io_only() { return; }
         self.cx
             .platform_ops
             .push_back(CxOsOp::SystemBrowserHistoryGo {
@@ -150,6 +153,10 @@ impl<'a> CxSystemBrowser<'a> {
         });
     }
 }
+
+/// A system haptic (`Cx::haptic_feedback`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HapticFeedback { Click, VirtualKey, Tick }
 
 pub trait CxOsApi {
     fn init_cx_os(&mut self);
@@ -1044,6 +1051,22 @@ impl Cx {
             .map(SharedBytes::from_owned)
     }
 
+    /// The script resource at `path` can never be read in this process: no
+    /// resource is registered under it, or its load already failed (a font
+    /// left out of the build's font set, an asset missing from the package).
+    /// A resource still loading, or not yet loaded, is not unavailable.
+    pub fn script_resource_generation(&self) -> u64 {
+        self.script_data.resources.generation.get()
+    }
+
+    pub fn script_resource_unavailable(&self, path: &str) -> bool {
+        let resources = self.script_data.resources.resources.borrow();
+        match resources.iter().find(|res| res.abs_path == path) {
+            None => true,
+            Some(res) => matches!(res.data, crate::script::res::CxScriptResourceData::Error(_)),
+        }
+    }
+
     pub fn null_texture(&self) -> Texture {
         self.null_texture.clone()
     }
@@ -1071,6 +1094,10 @@ impl Cx {
         ))]
         if let Some(active) = self.os.gpu_backend {
             return active;
+        }
+        #[cfg(all(target_os = "android", use_vulkan))]
+        if self.os.gl_fallback {
+            return GpuBackend::OpenGl;
         }
         #[cfg(gpusim)]
         {
@@ -1155,6 +1182,7 @@ impl Cx {
     }
 
     pub fn update_macos_menu(&mut self, menu: MacosMenu) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops.push_back(CxOsOp::UpdateMacosMenu(menu));
     }
 
@@ -1211,10 +1239,12 @@ impl Cx {
     }
 
     pub fn browser_update_url(&mut self, url: &str, replace: bool) {
+        if self.script_data.std.host_io_only() { return; }
         <Self as CxOsApi>::browser_update_url(self, url, replace);
     }
 
     pub fn browser_history_go(&mut self, delta: i32) {
+        if self.script_data.std.host_io_only() { return; }
         <Self as CxOsApi>::browser_history_go(self, delta);
     }
 
@@ -1379,6 +1409,15 @@ impl Cx {
         self.platform_ops.push_back(CxOsOp::HideTextIME);
     }
 
+    /// Whether keys go to a text field now: the widget with the key focus
+    /// is the one that raised the text IME (every text input does on
+    /// focus). An app's bare-key shortcuts (Space, arrows, letters) stand
+    /// down while it is true.
+    pub fn text_input_has_focus(&self) -> bool {
+        let focus = self.key_focus();
+        !focus.is_empty() && focus == self.ime_area
+    }
+
     pub fn text_ime_was_dismissed(&mut self) {
         self.publish_hosted_ime(crate::ime::HostedImeState::default());
         self.keyboard.set_text_ime_dismissed();
@@ -1478,7 +1517,19 @@ impl Cx {
     /// Copies the given string to the clipboard.
     ///
     /// Due to lack of platform clipboard support, it does not work on Web or tvOS.
+    /// A system haptic (Android: the window's `performHapticFeedback`;
+    /// a no-op elsewhere and in hosted children, which have no window).
+    pub fn haptic_feedback(&mut self, kind: HapticFeedback) {
+        #[cfg(all(target_os = "android", not(linux_direct)))]
+        if !crate::os::linux::android::android_hosted::is_hosted() {
+            let kind = match kind { HapticFeedback::Click => 0, HapticFeedback::VirtualKey => 1, HapticFeedback::Tick => 2 };
+            unsafe { crate::os::linux::android::android_jni::to_java_haptic(kind) };
+        }
+        let _ = kind;
+    }
+
     pub fn copy_to_clipboard(&mut self, content: &str) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::CopyToClipboard(content.to_owned()));
     }
@@ -1486,6 +1537,7 @@ impl Cx {
     /// Sets the primary selection (Linux middle-click paste).
     /// No-op on non-Linux platforms.
     pub fn set_primary_selection(&mut self, content: &str) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::SetPrimarySelection(content.to_owned()));
     }
@@ -1519,6 +1571,7 @@ impl Cx {
     }
 
     pub fn start_dragging(&mut self, items: Vec<DragItem>) {
+        if self.script_data.std.host_io_only() { return; }
         #[cfg(any(target_arch = "wasm32", target_os = "linux", test))]
         {
             self.drag_drop.start_internal_drag(items);
@@ -1544,6 +1597,7 @@ impl Cx {
     /// rejected request completes with `Event::DragEnd`, allowing callers to
     /// release gesture state without platform-specific timeouts.
     pub fn start_external_dragging(&mut self, window_id: WindowId, items: Vec<DragItem>) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops.iter().for_each(|op| {
             if matches!(op, CxOsOp::StartExternalDragging { .. }) {
                 panic!("start external drag twice");
@@ -1574,6 +1628,11 @@ impl Cx {
         self.fingers.sweep_lock(value);
     }
 
+    /// Takes a scoped sweep lock above existing owners, unless this area already owns one.
+    pub fn acquire_sweep_lock(&mut self, value: Area) -> Option<crate::event::SweepLock> {
+        self.fingers.acquire_sweep_lock(value)
+    }
+
     /// Hand the finger currently captured by `from` over to `to` (with sweep area
     /// `to_sweep`), so a drag begun on one widget can continue on another — e.g. a
     /// long-pressed drawer app handing its touch to the home pager for placement.
@@ -1591,8 +1650,27 @@ impl Cx {
         self.fingers.promote_capture_over(over)
     }
 
+    /// `area` takes the gesture of the finger `digit_id` (a scroller that
+    /// starts scrolling): it becomes the finger's one owner and every other
+    /// capture of it is cancelled. False when the gesture is not `area`'s
+    /// to take (see `CxFingers::claim_gesture`) — then it must stand down.
+    /// On success the owner dispatches `Event::FingerCancel` to its
+    /// children so the presses it took end at once.
+    pub fn claim_finger_gesture(&mut self, digit_id: crate::event::DigitId, area: Area) -> bool {
+        self.fingers.claim_gesture(digit_id, area)
+    }
+
     pub fn sweep_unlock(&mut self, value: Area) {
         self.fingers.sweep_unlock(value);
+    }
+
+    /// The area holding the sweep lock right now, if any.
+    ///
+    /// A popover that takes the pointer while it is open (a drop-down, a
+    /// radial menu, a drawer) reads this to tell its own grab from one an
+    /// overlay above it took, so it releases only what it locked itself.
+    pub fn sweep_lock_area(&self) -> Option<Area> {
+        self.fingers.sweep_lock_area()
     }
 
     /// Returns whether scrolling is currently allowed within the given `area`.
@@ -1605,6 +1683,10 @@ impl Cx {
 
     /// Blocks scrolling events/hits in the app *EXCEPT* for within the given `scrollable_area`.
     ///
+    /// Blocks nest: a second owner (a modal over a modal) takes over until it
+    /// releases its own block, and the first owner's block then applies again.
+    /// The same owner may call this every draw and keeps its single entry.
+    ///
     /// ***NOTE***: this must be re-invoked every time the area changes, which is upon every draw pass.
     ///
     /// If you want to block scrolling everywhere, pass in `Area::Empty`.
@@ -1613,12 +1695,24 @@ impl Cx {
             .block_scrolling_within_area(Some(scrollable_area));
     }
 
-    /// Fully unblocks scrolling, allowing scrolling to occur anywhere across the entire app.
-    ///
-    /// This effectively restores the default behavior, e.g., after a previous call to
-    /// [`Cx::block_scrolling_except_within()`].
+    /// Releases the innermost scroll block — the most recent
+    /// [`Cx::block_scrolling_except_within()`] whose owner has not released
+    /// it. With a single owner this restores the default, scrolling anywhere.
+    /// An owner that knows its area should call
+    /// [`Cx::unblock_scrolling_within_area()`] instead, so it never pops a
+    /// block another owner pushed over it.
     pub fn unblock_scrolling(&mut self) {
         self.fingers.block_scrolling_within_area(None);
+    }
+
+    /// Releases the scroll block owned by `scrollable_area`; a block held by
+    /// another owner is left alone.
+    ///
+    /// The owner-scoped counterpart of [`Cx::unblock_scrolling()`], for a
+    /// panel that closes without knowing whether something else has since
+    /// blocked scrolling over it.
+    pub fn unblock_scrolling_within_area(&mut self, scrollable_area: Area) {
+        self.fingers.unblock_scrolling_within_area(scrollable_area);
     }
 
     pub fn start_timeout(&mut self, delay: f64) -> Timer {
@@ -1988,6 +2082,15 @@ impl Cx {
         res
     }
 
+    /// The frame `next_frame` asked for has not been sent yet. Once it has,
+    /// this is false whether or not the asker heard it: a container that
+    /// stops passing events on (a closed modal) swallows it, and a widget
+    /// running an animation on a frame chain can tell that way that its
+    /// chain was cut and re-arm instead of stalling.
+    pub fn next_frame_is_pending(&self, next_frame: NextFrame) -> bool {
+        self.new_next_frames.contains(&next_frame)
+    }
+
     pub fn send_trigger(&mut self, area: Area, trigger: Trigger) {
         if let Some(triggers) = self.triggers.get_mut(&area) {
             triggers.push(trigger);
@@ -2043,6 +2146,7 @@ impl Cx {
     }
 
     pub fn http_request(&mut self, request_id: LiveId, request: HttpRequest) {
+        if self.script_data.std.host_io_only() { return; }
         if let Err(err) = self.net.http_start(request_id, request) {
             crate::error!("http_request failed for {}: {}", request_id.0, err);
         }
@@ -2123,6 +2227,7 @@ impl Cx {
         should_loop: bool,
         permission: crate::permission::Permission,
     ) {
+        if self.script_data.std.host_io_only() { return; }
         if let VideoSource::Camera(..) = &source {
             self.pending_camera_playbacks
                 .push(crate::cx::PendingCameraPlayback {
@@ -2304,6 +2409,7 @@ impl Cx {
         autoplay: bool,
         should_loop: bool,
     ) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops.push_back(CxOsOp::PrepareAudioPlayback(
             video_id,
             source,
@@ -2317,6 +2423,7 @@ impl Cx {
     }
 
     pub fn open_system_savefile_dialog(&mut self) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::SaveFileDialog(FileDialog::new()));
     }
@@ -2333,6 +2440,7 @@ impl Cx {
     /// On web this should be called directly from a user input handler:
     /// browsers may reject a picker requested after that activation expires.
     pub fn open_select_file_dialog(&mut self, dialog: FileDialog) {
+        if self.script_data.std.host_io_only() { return; }
         self.file_dialogs.begin(&dialog);
         self.platform_ops
             .push_back(CxOsOp::SelectFileDialog(dialog));
@@ -2361,15 +2469,18 @@ impl Cx {
     /// Open the platform's native save panel. The OS asks about
     /// overwriting before answering `SaveFileSelected`.
     pub fn open_save_file_dialog(&mut self, dialog: FileDialog) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops.push_back(CxOsOp::SaveFileDialog(dialog));
     }
 
     pub fn open_system_savefolder_dialog(&mut self) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::SaveFolderDialog(FileDialog::new()));
     }
 
     pub fn open_system_openfolder_dialog(&mut self) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::SelectFolderDialog(FileDialog::new()));
     }
@@ -2379,6 +2490,7 @@ impl Cx {
     /// [`crate::file_dialogs::FileDialogAction`] in the actions pass —
     /// `FolderSelected` with the chosen path, or `FolderCancelled`.
     pub fn open_select_folder_dialog(&mut self, dialog: FileDialog) {
+        if self.script_data.std.host_io_only() { return; }
         self.platform_ops
             .push_back(CxOsOp::SelectFolderDialog(dialog));
     }
@@ -2777,5 +2889,28 @@ impl Cx {
                 )
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod host_io_tests {
+    use super::*;
+
+    #[test]
+    fn host_io_native_widget_paths_do_not_enqueue_external_operations() {
+        let mut cx = Cx::new(Box::new(|_, _| {}));
+        cx.script_data.std.restrict_to_host_io();
+        let before = cx.platform_ops.len();
+        cx.copy_to_clipboard("private");
+        cx.set_primary_selection("private");
+        cx.open_system_savefile_dialog();
+        cx.open_system_openfile_dialog();
+        cx.open_system_openfolder_dialog();
+        cx.open_system_savefolder_dialog();
+        cx.system_browser(LiveId::unique()).spawn("https://example.invalid/private");
+        cx.system_browser(LiveId::unique()).set_url("https://example.invalid/private", false);
+        cx.prepare_audio_playback(LiveId::unique(), VideoSource::Network("https://example.invalid/private".into()), false, false);
+        cx.prepare_audio_playback(LiveId::unique(), VideoSource::Filesystem("/etc/passwd".into()), false, false);
+        assert_eq!(cx.platform_ops.len(), before);
     }
 }
