@@ -404,6 +404,10 @@ pub fn app_main_configure<F: FnMut(&mut Cx)>(f: F) -> F {
 /// hand the app its build (`cx.set_global(...)`), which the library's
 /// `script_mod` reads through `vm.cx_mut()` and its startup through `cx`:
 /// one mechanism on desktop, Android, OHOS and the web, and no statics.
+///
+/// `font_set: Latin, lazy_fonts: none` ships the Latin set without its lazy
+/// CJK and emoji fallbacks (about 48 MB): for an app whose text never needs
+/// them. A glyph from those ranges then draws as a box.
 #[macro_export]
 macro_rules! app_main {
     ( $app:ident ) => {
@@ -441,6 +445,18 @@ macro_rules! app_main {
     };
     ( $app:ident, font_set: Latin, font_assets: [$($asset:expr),* $(,)?], configure: $configure:expr ) => {
         $crate::app_main!(@impl $app, $crate::FontSet::Latin, $crate::LATIN_FONT_ASSET_PACKAGE_MANIFEST, [$($asset),*], $configure);
+    };
+    ( $app:ident, font_set: Latin, lazy_fonts: none ) => {
+        $crate::app_main!($app, font_set: Latin, lazy_fonts: none, configure: |_cx: &mut Cx| {});
+    };
+    ( $app:ident, font_set: Latin, lazy_fonts: none, configure: $configure:expr ) => {
+        $crate::app_main!(@impl $app, $crate::FontSet::Latin, $crate::LATIN_FONT_ASSET_MANIFEST, [], $configure);
+    };
+    ( $app:ident, font_set: Latin, lazy_fonts: none, font_assets: [$($asset:expr),* $(,)?] ) => {
+        $crate::app_main!($app, font_set: Latin, lazy_fonts: none, font_assets: [$($asset),*], configure: |_cx: &mut Cx| {});
+    };
+    ( $app:ident, font_set: Latin, lazy_fonts: none, font_assets: [$($asset:expr),* $(,)?], configure: $configure:expr ) => {
+        $crate::app_main!(@impl $app, $crate::FontSet::Latin, $crate::LATIN_FONT_ASSET_MANIFEST, [$($asset),*], $configure);
     };
     ( $app:ident, font_set: International, font_assets: [$($asset:expr),* $(,)?] ) => {
         $crate::app_main!($app, font_set: International, font_assets: [$($asset),*], configure: |_cx: &mut Cx| {});
@@ -715,4 +731,32 @@ fn init(exports: napi_ohos::JsObject, env: napi_ohos::Env) -> napi_ohos::Result<
         ) -> napi_ohos::Result<()>;
     }
     unsafe { ohos_init_app_main(exports, env) }
+}
+
+#[cfg(test)]
+mod latin_without_lazy_fonts_compile_test {
+    #![allow(dead_code, unused_mut)]
+
+    use crate::*;
+
+    #[derive(Script, ScriptHook)]
+    struct LatinApp {}
+
+    impl AppMain for LatinApp {
+        fn script_mod(_vm: &mut ScriptVm) -> ScriptValue {
+            NIL
+        }
+
+        fn handle_event(&mut self, _cx: &mut Cx, _event: &Event) {}
+    }
+
+    app_main!(LatinApp, font_set: Latin, lazy_fonts: none);
+
+    #[test]
+    fn latin_without_lazy_fonts_ships_only_the_eager_latin_manifest() {
+        assert_eq!(MAKEPAD_FONT_ASSETS_V1, *LATIN_FONT_ASSET_MANIFEST);
+        let manifest = std::str::from_utf8(&MAKEPAD_FONT_ASSETS_V1).unwrap();
+        assert!(!manifest.contains("LXGWWenKai"));
+        assert!(!manifest.contains("NotoColorEmoji.ttf"));
+    }
 }

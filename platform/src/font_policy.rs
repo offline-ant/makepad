@@ -389,7 +389,9 @@ pub const LATIN_FONT_ASSET_MANIFEST: &[u8; 485] = b"format=makepad.font-assets.v
 
 /// The wasm/package payload for the Latin/UI runtime set. The final three
 /// files remain distributable assets, but are not members of the eager Latin
-/// manifest above and are fetched/read only after a glyph miss.
+/// manifest above and are fetched/read only after a glyph miss. An app that
+/// never needs them ships the eager manifest alone with `app_main!`'s
+/// `font_set: Latin, lazy_fonts: none`.
 const LATIN_LAZY_PACKAGE_ASSETS: &[&str] = &[
     LXGW_REGULAR.resource_path,
     LXGW_BOLD.resource_path,
