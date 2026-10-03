@@ -62,19 +62,19 @@ pub const ANDROID_SDK_URLS_33: AndroidSDKUrls = AndroidSDKUrls {
     // Store floor for new submissions. Independent of `sdk_version`: target
     // controls runtime-behavior compat, not what the binary links against.
     target_sdk_version: 35,
-    // Build-tools and platform stay at API 33 — that's our *compile* SDK, used
-    // for `android.jar` (Java compile classpath) and aapt2. Java code can call
-    // API 33 classes at compile time; runtime version checks keep older devices
-    // from actually executing those paths.
-    build_tools_version: "33.0.1",
-    sdk_extension: "ext4",
-    platform: "android-33-ext4",
+    // Build-tools and platform are API 35, our *compile* SDK, used for
+    // `android.jar` (Java compile classpath) and aapt2, so manifests can use
+    // API 35 attributes such as `foregroundServiceType="specialUse"`. Runtime
+    // version checks keep older devices from executing newer paths.
+    build_tools_version: "35.0.0",
+    sdk_extension: "",
+    platform: "android-35",
     ndk_version_full: "28.2.13676358",
 
-    platform_dl: "https://dl.google.com/android/repository/platform-33-ext4_r01.zip",
-    build_tools_macos: "https://dl.google.com/android/repository/build-tools_r33.0.1-macosx.zip",
-    build_tools_linux: "https://dl.google.com/android/repository/build-tools_r33.0.1-linux.zip",
-    build_tools_windows: "https://dl.google.com/android/repository/build-tools_r33.0.1-windows.zip",
+    platform_dl: "https://dl.google.com/android/repository/platform-35_r02.zip",
+    build_tools_macos: "https://dl.google.com/android/repository/build-tools_r35_macosx.zip",
+    build_tools_linux: "https://dl.google.com/android/repository/build-tools_r35_linux.zip",
+    build_tools_windows: "https://dl.google.com/android/repository/build-tools_r35_windows.zip",
     platform_tools_macos:
         "https://dl.google.com/android/repository/platform-tools_r33.0.3-darwin.zip",
     platform_tools_linux:
@@ -489,7 +489,7 @@ pub fn expand_sdk(
                 &[
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt.exe",
                         ),
@@ -497,7 +497,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt2.exe",
                         ),
@@ -505,7 +505,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "zipalign.exe",
                         ),
@@ -513,7 +513,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/apksigner.jar",
                         ),
@@ -521,7 +521,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/d8.jar",
                         ),
@@ -834,7 +834,7 @@ pub fn expand_sdk(
                 &[
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt",
                         ),
@@ -842,7 +842,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt2",
                         ),
@@ -850,7 +850,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "zipalign",
                         ),
@@ -858,7 +858,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/apksigner.jar",
                         ),
@@ -866,7 +866,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/d8.jar",
                         ),
@@ -1041,7 +1041,7 @@ pub fn expand_sdk(
                 &[
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt",
                         ),
@@ -1049,7 +1049,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "aapt2",
                         ),
@@ -1057,7 +1057,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib64/libc++.so",
                         ),
@@ -1065,7 +1065,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "zipalign",
                         ),
@@ -1073,7 +1073,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/apksigner.jar",
                         ),
@@ -1081,7 +1081,7 @@ pub fn expand_sdk(
                     ),
                     (
                         &copy_map(
-                            "android-13",
+                            "android-15",
                             &format!("{BUILD_TOOLS_DIR}/{ANDROID_BUILD_TOOLS_VERSION}"),
                             "lib/d8.jar",
                         ),
